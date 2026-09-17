@@ -24,8 +24,8 @@ SELECT_ITEMS = "SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY id"
 UPDATE_STATUS = "UPDATE invoices SET status = ? WHERE id = ?"
 
 
-def insert_invoice(connection: sqlite3.Connection, invoice: InvoiceRow) -> None:
-    connection.execute(
+def insert_invoice(conn: sqlite3.Connection, invoice: InvoiceRow) -> None:
+    conn.execute(
         INSERT_INVOICE,
         (
             invoice.id,
@@ -42,30 +42,30 @@ def insert_invoice(connection: sqlite3.Connection, invoice: InvoiceRow) -> None:
 
 
 def insert_items(
-    connection: sqlite3.Connection,
+    conn: sqlite3.Connection,
     invoice_id: str,
     items: list[tuple[str, int, int]],
 ) -> None:
-    connection.executemany(
+    conn.executemany(
         INSERT_ITEM,
         [(invoice_id, description, quantity, unit) for description, quantity, unit in items],
     )
 
 
-def get_invoice(connection: sqlite3.Connection, invoice_id: str) -> InvoiceRow | None:
-    row = connection.execute(SELECT_INVOICE, (invoice_id,)).fetchone()
+def get_invoice(conn: sqlite3.Connection, invoice_id: str) -> InvoiceRow | None:
+    row = conn.execute(SELECT_INVOICE, (invoice_id,)).fetchone()
     return InvoiceRow.from_row(row) if row else None
 
 
-def list_invoices(connection: sqlite3.Connection) -> list[InvoiceRow]:
-    rows = connection.execute(SELECT_ALL_INVOICES).fetchall()
+def list_invoices(conn: sqlite3.Connection) -> list[InvoiceRow]:
+    rows = conn.execute(SELECT_ALL_INVOICES).fetchall()
     return [InvoiceRow.from_row(row) for row in rows]
 
 
-def list_items(connection: sqlite3.Connection, invoice_id: str) -> list[InvoiceItemRow]:
-    rows = connection.execute(SELECT_ITEMS, (invoice_id,)).fetchall()
+def list_items(conn: sqlite3.Connection, invoice_id: str) -> list[InvoiceItemRow]:
+    rows = conn.execute(SELECT_ITEMS, (invoice_id,)).fetchall()
     return [InvoiceItemRow.from_row(row) for row in rows]
 
 
-def set_status(connection: sqlite3.Connection, invoice_id: str, status: str) -> None:
-    connection.execute(UPDATE_STATUS, (status, invoice_id))
+def set_status(conn: sqlite3.Connection, invoice_id: str, status: str) -> None:
+    conn.execute(UPDATE_STATUS, (status, invoice_id))

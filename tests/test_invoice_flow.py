@@ -55,13 +55,25 @@ def test_capture_above_outstanding_is_rejected(connection, agent):
         payment_service.capture_payment(connection, agent, invoice.id, 5_001)
 
 
-def test_agent_cannot_issue_a_refund(connection, agent):
+def test_agent_can_issue_a_refund(connection, agent):
     invoice = invoice_service.create_invoice(connection, agent, _new_invoice())
     payment_service.capture_payment(connection, agent, invoice.id, 5_000)
 
+    refund = payment_service.issue_refund(
+        connection, agent, RefundRequest(invoice.id, 1_000, "goodwill")
+    )
+
+    assert refund.amount_cents == 1_000
+
+
+def test_viewer_cannot_issue_a_refund(connection, agent):
+    invoice = invoice_service.create_invoice(connection, agent, _new_invoice())
+    payment_service.capture_payment(connection, agent, invoice.id, 5_000)
+    viewer = Principal(user_id="u_viewer", role="viewer")
+
     with pytest.raises(PermissionDenied):
         payment_service.issue_refund(
-            connection, agent, RefundRequest(invoice.id, 1_000, "goodwill")
+            connection, viewer, RefundRequest(invoice.id, 1_000, "goodwill")
         )
 
 

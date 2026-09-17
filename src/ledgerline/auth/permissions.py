@@ -1,7 +1,7 @@
 """Role based permissions.
 
-`agent` handles day to day invoicing; refunds above the agent ceiling are an
-`admin` decision.
+`agent` handles day to day invoicing and support, `admin` adds nothing beyond
+it today, and `viewer` is read only.
 """
 
 from __future__ import annotations
@@ -15,11 +15,9 @@ REFUND_ISSUE = "refund:issue"
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "viewer": frozenset({INVOICE_READ}),
-    "agent": frozenset({INVOICE_READ, INVOICE_WRITE, PAYMENT_CAPTURE}),
+    "agent": frozenset({INVOICE_READ, INVOICE_WRITE, PAYMENT_CAPTURE, REFUND_ISSUE}),
     "admin": frozenset({INVOICE_READ, INVOICE_WRITE, PAYMENT_CAPTURE, REFUND_ISSUE}),
 }
-
-AGENT_REFUND_CEILING_CENTS = 25_000
 
 
 @dataclass(frozen=True)
@@ -43,11 +41,3 @@ def can(principal: Principal, permission: str) -> bool:
 def authorize(principal: Principal, permission: str) -> None:
     if not can(principal, permission):
         raise PermissionDenied(f"role {principal.role!r} may not {permission}")
-
-
-def authorize_refund(principal: Principal, amount_cents: int) -> None:
-    authorize(principal, REFUND_ISSUE)
-    if principal.role != "admin" and amount_cents > AGENT_REFUND_CEILING_CENTS:
-        raise PermissionDenied(
-            f"refunds above {AGENT_REFUND_CEILING_CENTS} cents require an admin"
-        )

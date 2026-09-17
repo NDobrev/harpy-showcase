@@ -25,8 +25,8 @@ WHERE invoice_id = ? AND kind = ?
 """
 
 
-def insert_payment(connection: sqlite3.Connection, payment: PaymentRow) -> None:
-    connection.execute(
+def insert_payment(conn: sqlite3.Connection, payment: PaymentRow) -> None:
+    conn.execute(
         INSERT_PAYMENT,
         (
             payment.id,
@@ -38,8 +38,8 @@ def insert_payment(connection: sqlite3.Connection, payment: PaymentRow) -> None:
     )
 
 
-def insert_ledger_entries(connection: sqlite3.Connection, entries: list[LedgerEntry]) -> None:
-    connection.executemany(
+def insert_ledger_entries(conn: sqlite3.Connection, entries: list[LedgerEntry]) -> None:
+    conn.executemany(
         INSERT_LEDGER_ENTRY,
         [
             (entry.invoice_id, entry.account, entry.debit_cents, entry.credit_cents, entry.memo)
@@ -48,11 +48,11 @@ def insert_ledger_entries(connection: sqlite3.Connection, entries: list[LedgerEn
     )
 
 
-def list_payments(connection: sqlite3.Connection, invoice_id: str) -> list[PaymentRow]:
-    rows = connection.execute(SELECT_PAYMENTS, (invoice_id,)).fetchall()
+def list_payments(conn: sqlite3.Connection, invoice_id: str) -> list[PaymentRow]:
+    rows = conn.execute(SELECT_PAYMENTS, (invoice_id,)).fetchall()
     return [PaymentRow.from_row(row) for row in rows]
 
 
-def total_by_kind(connection: sqlite3.Connection, invoice_id: str, kind: str) -> int:
-    row = connection.execute(SUM_BY_KIND, (invoice_id, kind)).fetchone()
+def total_by_kind(conn: sqlite3.Connection, invoice_id: str, kind: str) -> int:
+    row = conn.execute(SUM_BY_KIND, (invoice_id, kind)).fetchone()
     return int(row["total"])
