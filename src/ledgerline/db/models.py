@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+CUSTOMERS_TABLE = "customers"
 INVOICES_TABLE = "invoices"
 INVOICE_ITEMS_TABLE = "invoice_items"
 PAYMENTS_TABLE = "payments"
@@ -12,7 +13,7 @@ LEDGER_ENTRIES_TABLE = "ledger_entries"
 
 INVOICE_COLUMNS = (
     "id",
-    "customer_email",
+    "customer_id",
     "region",
     "status",
     "subtotal_cents",
@@ -24,9 +25,20 @@ INVOICE_COLUMNS = (
 
 
 @dataclass(frozen=True)
+class CustomerRow:
+    id: str
+    email: str
+    created_at: str
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> CustomerRow:
+        return cls(id=row["id"], email=row["email"], created_at=row["created_at"])
+
+
+@dataclass(frozen=True)
 class InvoiceRow:
     id: str
-    customer_email: str
+    customer_id: str
     region: str
     status: str
     subtotal_cents: int
@@ -34,10 +46,14 @@ class InvoiceRow:
     tax_cents: int
     total_cents: int
     created_at: str
+    customer_email: str = ""
+    """Joined from `customers`; not a column on `invoices`."""
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> InvoiceRow:
-        return cls(**{column: row[column] for column in INVOICE_COLUMNS})
+        values = {column: row[column] for column in INVOICE_COLUMNS}
+        email = row["customer_email"] if "customer_email" in row.keys() else ""
+        return cls(**values, customer_email=email)
 
 
 @dataclass(frozen=True)
