@@ -30,8 +30,18 @@ class InvoiceOut(BaseModel):
     created_at: str
 
 
+class InvoicePageOut(BaseModel):
+    data: list[InvoiceOut]
+    next_cursor: str | None = None
+
+
 class CaptureIn(BaseModel):
     amount_cents: int = Field(gt=0)
+
+
+class RefundIn(BaseModel):
+    amount_cents: int = Field(gt=0)
+    reason: str = Field(min_length=1, max_length=200)
 
 
 class PaymentOut(BaseModel):

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ledgerline.api.deps import get_connection, get_principal
-from ledgerline.api.schemas import InvoiceIn, InvoiceOut
+from ledgerline.api.schemas import InvoiceIn, InvoiceOut, InvoicePageOut
 from ledgerline.auth.permissions import PermissionDenied, Principal
+from ledgerline.config import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from ledgerline.domain.pricing import LineItem, PricingError
 from ledgerline.services import invoice_service
-from ledgerline.services.invoice_service import InvoiceNotFound, NewInvoice
+from ledgerline.services.invoice_service import InvalidCursor, InvoiceNotFound, NewInvoice
 
 router = APIRouter(tags=["invoices"])
 
@@ -39,16 +40,23 @@ def create_invoice(
     return InvoiceOut(**vars(invoice))
 
 
-@router.get("/v1/invoices/list", response_model=list[InvoiceOut])
+@router.get("/v1/invoices", response_model=InvoicePageOut)
 def list_invoices(
+    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    cursor: str | None = Query(default=None),
     connection: sqlite3.Connection = Depends(get_connection),
     principal: Principal = Depends(get_principal),
-) -> list[InvoiceOut]:
+) -> InvoicePageOut:
     try:
-        rows = invoice_service.list_invoices(connection, principal)
+        page = invoice_service.list_invoices(connection, principal, limit=limit, cursor=cursor)
     except PermissionDenied as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
-    return [InvoiceOut(**vars(row)) for row in rows]
+    except InvalidCursor as error:
+        raise HTTPException(status_code=400, detail="invalid cursor") from error
+    return InvoicePageOut(
+        data=[InvoiceOut(**vars(row)) for row in page.invoices],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get("/v1/invoices/{invoice_id}", response_model=InvoiceOut)
