@@ -2,12 +2,15 @@
 
 All money is an integer number of minor units (cents). Percentages are floats
 between 0 and 100.
+
+A discount is spread across the line items it applies to, and tax is charged on
+what the customer actually owes for each line.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 
 TAX_RATES: dict[str, str] = {
     "US-CA": "0.0875",
@@ -32,15 +35,37 @@ class LineItem:
 
 
 @dataclass(frozen=True)
+class LinePrice:
+    description: str
+    amount_cents: int
+    discount_cents: int
+    tax_cents: int
+
+    @property
+    def taxable_cents(self) -> int:
+        return self.amount_cents - self.discount_cents
+
+    @property
+    def total_cents(self) -> int:
+        return self.taxable_cents + self.tax_cents
+
+
+@dataclass(frozen=True)
 class InvoiceTotals:
     subtotal_cents: int
     discount_cents: int
     tax_cents: int
     total_cents: int
+    lines: tuple[LinePrice, ...] = ()
 
 
 class PricingError(ValueError):
     """Raised when an invoice cannot be priced."""
+
+
+def _to_cents(value: Decimal) -> int:
+    """Round to whole cents, half to even, so repeated pricing does not drift up."""
+    return int(value.quantize(Decimal(1), rounding=ROUND_HALF_EVEN))
 
 
 def tax_rate_for(region: str) -> Decimal:
@@ -66,12 +91,34 @@ def discount_cents(subtotal: int, discount_percent: float) -> int:
     if discount_percent > MAX_DISCOUNT_PERCENT:
         raise PricingError(f"discount percent above {MAX_DISCOUNT_PERCENT} needs approval")
     raw = Decimal(subtotal) * Decimal(str(discount_percent)) / Decimal(100)
-    return int(raw.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return _to_cents(raw)
 
 
 def tax_cents(subtotal: int, region: str) -> int:
-    raw = Decimal(subtotal) * tax_rate_for(region)
-    return int(raw.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return _to_cents(Decimal(subtotal) * tax_rate_for(region))
+
+
+def allocate_discount(items: list[LineItem], total_discount: int) -> list[int]:
+    """Split `total_discount` across `items` in proportion to their amounts.
+
+    Uses the largest remainder method: every line gets its floored share, then
+    the leftover cents go to the lines with the largest fractional part. The
+    returned amounts always sum to `total_discount` exactly.
+    """
+    subtotal = sum(item.amount_cents for item in items)
+    if total_discount == 0 or subtotal == 0:
+        return [0] * len(items)
+    shares = [Decimal(item.amount_cents) * total_discount / Decimal(subtotal) for item in items]
+    allocated = [int(share) for share in shares]
+    leftover = total_discount - sum(allocated)
+    ranked = sorted(
+        range(len(items)),
+        key=lambda index: (shares[index] - allocated[index], items[index].amount_cents),
+        reverse=True,
+    )
+    for index in ranked[:leftover]:
+        allocated[index] += 1
+    return allocated
 
 
 def price_invoice(
@@ -82,15 +129,27 @@ def price_invoice(
 ) -> InvoiceTotals:
     """Price an invoice.
 
-    Tax is charged on the undiscounted subtotal; the discount reduces only the
-    amount the customer owes.
+    The discount is prorated across the line items, and each line is taxed on
+    its discounted amount, so a discount reduces the tax the customer owes.
     """
     subtotal = subtotal_cents(items)
     discount = discount_cents(subtotal, discount_percent)
-    tax = tax_cents(subtotal, region)
+    rate = tax_rate_for(region)
+    allocations = allocate_discount(items, discount)
+    lines = tuple(
+        LinePrice(
+            description=item.description,
+            amount_cents=item.amount_cents,
+            discount_cents=line_discount,
+            tax_cents=_to_cents(Decimal(item.amount_cents - line_discount) * rate),
+        )
+        for item, line_discount in zip(items, allocations, strict=True)
+    )
+    tax = sum(line.tax_cents for line in lines)
     return InvoiceTotals(
         subtotal_cents=subtotal,
         discount_cents=discount,
         tax_cents=tax,
         total_cents=subtotal - discount + tax,
+        lines=lines,
     )
