@@ -6,7 +6,12 @@ import sqlite3
 import uuid
 from datetime import date, datetime, timezone
 
-from ledgerline.auth.permissions import PAYMENT_CAPTURE, Principal, authorize, authorize_refund
+from ledgerline.auth.permissions import (
+    PAYMENT_CAPTURE,
+    REFUND_ISSUE,
+    Principal,
+    authorize,
+)
 from ledgerline.db.models import PaymentRow
 from ledgerline.db.repositories import invoices as invoice_repo
 from ledgerline.db.repositories import payments as payment_repo
@@ -71,7 +76,7 @@ def issue_refund(
     *,
     today: date | None = None,
 ) -> PaymentRow:
-    authorize_refund(principal, request.amount_cents)
+    authorize(principal, REFUND_ISSUE)
     invoice = invoice_repo.get_invoice(connection, request.invoice_id)
     if invoice is None:
         raise InvoiceNotFound(request.invoice_id)

@@ -22,6 +22,7 @@ def create_invoice(
     connection: sqlite3.Connection = Depends(get_connection),
     principal: Principal = Depends(get_principal),
 ) -> InvoiceOut:
+    """Price and store a new invoice."""
     request = NewInvoice(
         customer_email=body.customer_email,
         region=body.region,
@@ -44,6 +45,7 @@ def list_invoices(
     connection: sqlite3.Connection = Depends(get_connection),
     principal: Principal = Depends(get_principal),
 ) -> list[InvoiceOut]:
+    """Every invoice, newest first."""
     try:
         rows = invoice_service.list_invoices(connection, principal)
     except PermissionDenied as error:
@@ -57,6 +59,7 @@ def get_invoice(
     connection: sqlite3.Connection = Depends(get_connection),
     principal: Principal = Depends(get_principal),
 ) -> InvoiceOut:
+    """One invoice by id."""
     try:
         invoice, _items = invoice_service.get_invoice(connection, principal, invoice_id)
     except PermissionDenied as error:

@@ -35,7 +35,9 @@ harpy --repo NDobrev/harpy-showcase <PR>
 | `src/ledgerline/domain/` | Pure pricing, refund, and ledger rules |
 | `src/ledgerline/services/` | Use cases combining domain rules with storage |
 | `migrations/versions/` | Forward-only SQL migrations |
+| `src/ledgerline/generated/` | Generated OpenAPI client — do not hand-edit |
 | `tests/` | Domain and service tests |
+| `scripts/` | Spec dump and code generation helpers |
 | `docs/` | API and schema reference |
 
 ## Run it

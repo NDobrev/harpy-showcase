@@ -23,6 +23,7 @@ def capture_payment(
     connection: sqlite3.Connection = Depends(get_connection),
     principal: Principal = Depends(get_principal),
 ) -> PaymentOut:
+    """Capture money against an open invoice."""
     try:
         payment = payment_service.capture_payment(
             connection, principal, invoice_id, body.amount_cents
@@ -42,6 +43,7 @@ def list_payments(
     connection: sqlite3.Connection = Depends(get_connection),
     principal: Principal = Depends(get_principal),
 ) -> list[PaymentOut]:
+    """Captures and refunds recorded for an invoice."""
     try:
         authorize(principal, INVOICE_READ)
     except PermissionDenied as error:

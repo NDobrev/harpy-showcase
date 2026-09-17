@@ -14,7 +14,12 @@ gateway in `X-User-Id` and `X-User-Role` headers.
 | GET | `/v1/invoices/{invoice_id}/payments` | `invoice:read` | Captures and refunds for an invoice |
 
 Refunds exist in the domain and service layers but are not exposed over HTTP;
-support staff issue them through an internal console.
+support staff issue them through an internal console, where `agent` and `admin`
+are equivalent.
+
+A generated client for these operations lives in
+`src/ledgerline/generated/openapi_client.py`; regenerate it with `make client`
+after `make spec`.
 
 ## Errors
 
