@@ -14,16 +14,21 @@ has something concrete to explain.
 
 | PR | Kind of change | What Harpy should surface |
 |---|---|---|
-| 1 | Endpoint / API contract | A removed route, a changed response shape, and a new refund endpoint — a breaking API impact |
-| 2 | Database schema | A new table, a new foreign key, a dropped column, and the queries that follow — a breaking DB impact |
-| 3 | Business logic | Discount proration and rounding change the money customers owe, with one untested edge case |
-| 4 | Security, buried in noise | An agent refund permission and a removed amount ceiling, hidden inside a large mechanical refactor |
+| [1](https://github.com/NDobrev/harpy-showcase/pull/1) | Endpoint / API contract | A removed route, a bare array becoming a paginated envelope, and a new refund endpoint — a breaking API impact |
+| [2](https://github.com/NDobrev/harpy-showcase/pull/2) | Database schema | A new table, a new foreign key, a backfill, and a dropped column, with reads rewritten to a join — a breaking DB impact behind an unchanged HTTP contract |
+| [3](https://github.com/NDobrev/harpy-showcase/pull/3) | Business logic | Discount proration and per-line rounding move the tax base, so totals change by up to −987 cents — and by +1 cent even with no discount |
+| [4](https://github.com/NDobrev/harpy-showcase/pull/4) | Security, buried in noise | 1271 inserted lines, of which ~10 matter: agents gain `refund:issue`, the admin-only amount ceiling disappears, and a test asserting the old rule is flipped |
 
 Review them with:
 
 ```bash
 harpy --repo NDobrev/harpy-showcase <PR>
 ```
+
+PR 4 is the one worth watching: the deliberate signal-to-noise ratio is about
+1:130, the permission change is described as a one-line simplification in the PR
+body, and the only test that guarded the old behavior was rewritten to assert
+the new one.
 
 ## Layout
 
