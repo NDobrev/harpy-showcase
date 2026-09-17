@@ -19,7 +19,17 @@ VALUES (?, ?, ?, ?)
 """
 
 SELECT_INVOICE = "SELECT * FROM invoices WHERE id = ?"
-SELECT_ALL_INVOICES = "SELECT * FROM invoices ORDER BY created_at DESC, id DESC"
+SELECT_INVOICE_PAGE = """
+SELECT * FROM invoices
+ORDER BY created_at DESC, id DESC
+LIMIT ?
+"""
+SELECT_INVOICE_PAGE_AFTER = """
+SELECT * FROM invoices
+WHERE (created_at, id) < (?, ?)
+ORDER BY created_at DESC, id DESC
+LIMIT ?
+"""
 SELECT_ITEMS = "SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY id"
 UPDATE_STATUS = "UPDATE invoices SET status = ? WHERE id = ?"
 
@@ -57,8 +67,17 @@ def get_invoice(connection: sqlite3.Connection, invoice_id: str) -> InvoiceRow |
     return InvoiceRow.from_row(row) if row else None
 
 
-def list_invoices(connection: sqlite3.Connection) -> list[InvoiceRow]:
-    rows = connection.execute(SELECT_ALL_INVOICES).fetchall()
+def list_invoice_page(
+    connection: sqlite3.Connection,
+    *,
+    limit: int,
+    after: tuple[str, str] | None = None,
+) -> list[InvoiceRow]:
+    """Keyset page ordered by `(created_at, id)` descending."""
+    if after is None:
+        rows = connection.execute(SELECT_INVOICE_PAGE, (limit,)).fetchall()
+    else:
+        rows = connection.execute(SELECT_INVOICE_PAGE_AFTER, (*after, limit)).fetchall()
     return [InvoiceRow.from_row(row) for row in rows]
 
 

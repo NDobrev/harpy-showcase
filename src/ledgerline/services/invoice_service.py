@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from ledgerline.auth.permissions import INVOICE_READ, INVOICE_WRITE, Principal, authorize
+from ledgerline.config import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from ledgerline.db.models import InvoiceItemRow, InvoiceRow
 from ledgerline.db.repositories import invoices as invoice_repo
 from ledgerline.domain.pricing import LineItem, price_invoice
@@ -25,8 +28,18 @@ class NewInvoice:
     discount_percent: float = 0.0
 
 
+@dataclass(frozen=True)
+class InvoicePage:
+    invoices: list[InvoiceRow]
+    next_cursor: str | None
+
+
 class InvoiceNotFound(LookupError):
     """Raised when an invoice id does not exist."""
+
+
+class InvalidCursor(ValueError):
+    """Raised when a pagination cursor cannot be decoded."""
 
 
 def _now() -> str:
@@ -77,6 +90,36 @@ def get_invoice(
     return invoice, invoice_repo.list_items(connection, invoice_id)
 
 
-def list_invoices(connection: sqlite3.Connection, principal: Principal) -> list[InvoiceRow]:
+def _encode_cursor(invoice: InvoiceRow) -> str:
+    raw = f"{invoice.created_at}|{invoice.id}".encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _decode_cursor(cursor: str) -> tuple[str, str]:
+    padded = cursor + "=" * (-len(cursor) % 4)
+    try:
+        created_at, invoice_id = base64.urlsafe_b64decode(padded).decode().split("|", 1)
+    except (binascii.Error, UnicodeDecodeError, ValueError) as error:
+        raise InvalidCursor(cursor) from error
+    return created_at, invoice_id
+
+
+def list_invoices(
+    connection: sqlite3.Connection,
+    principal: Principal,
+    *,
+    limit: int = DEFAULT_PAGE_SIZE,
+    cursor: str | None = None,
+) -> InvoicePage:
+    """Return one page of invoices, newest first, plus the cursor for the next."""
     authorize(principal, INVOICE_READ)
-    return invoice_repo.list_invoices(connection)
+    if limit < 1 or limit > MAX_PAGE_SIZE:
+        raise ValueError(f"limit must be between 1 and {MAX_PAGE_SIZE}")
+    after = _decode_cursor(cursor) if cursor else None
+    rows = invoice_repo.list_invoice_page(connection, limit=limit + 1, after=after)
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    return InvoicePage(
+        invoices=page,
+        next_cursor=_encode_cursor(page[-1]) if has_more and page else None,
+    )

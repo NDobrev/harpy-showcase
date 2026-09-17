@@ -7,9 +7,10 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException
 
 from ledgerline.api.deps import get_connection, get_principal
-from ledgerline.api.schemas import CaptureIn, PaymentOut
+from ledgerline.api.schemas import CaptureIn, PaymentOut, RefundIn
 from ledgerline.auth.permissions import INVOICE_READ, PermissionDenied, Principal, authorize
 from ledgerline.db.repositories import payments as payment_repo
+from ledgerline.domain.refunds import RefundRejected, RefundRequest
 from ledgerline.services import payment_service
 from ledgerline.services.invoice_service import InvoiceNotFound
 
@@ -32,6 +33,30 @@ def capture_payment(
     except InvoiceNotFound as error:
         raise HTTPException(status_code=404, detail="invoice not found") from error
     except payment_service.CaptureRejected as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return PaymentOut(**vars(payment))
+
+
+@router.post("/v1/invoices/{invoice_id}/refunds", response_model=PaymentOut, status_code=201)
+def issue_refund(
+    invoice_id: str,
+    body: RefundIn,
+    connection: sqlite3.Connection = Depends(get_connection),
+    principal: Principal = Depends(get_principal),
+) -> PaymentOut:
+    """Issue a refund against a captured invoice. Replaces the internal console."""
+    request = RefundRequest(
+        invoice_id=invoice_id,
+        amount_cents=body.amount_cents,
+        reason=body.reason,
+    )
+    try:
+        payment = payment_service.issue_refund(connection, principal, request)
+    except PermissionDenied as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except InvoiceNotFound as error:
+        raise HTTPException(status_code=404, detail="invoice not found") from error
+    except RefundRejected as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return PaymentOut(**vars(payment))
 

@@ -76,6 +76,26 @@ def test_admin_refund_records_payment_and_status(connection, agent, admin):
     assert payment_repo.total_by_kind(connection, invoice.id, payment_service.KIND_REFUND) == 5_000
 
 
+def test_invoice_page_walks_the_cursor(connection, agent):
+    created = [
+        invoice_service.create_invoice(connection, agent, _new_invoice()).id for _ in range(3)
+    ]
+
+    first = invoice_service.list_invoices(connection, agent, limit=2)
+    second = invoice_service.list_invoices(connection, agent, limit=2, cursor=first.next_cursor)
+
+    assert len(first.invoices) == 2
+    assert first.next_cursor is not None
+    assert len(second.invoices) == 1
+    assert second.next_cursor is None
+    assert {row.id for row in first.invoices + second.invoices} == set(created)
+
+
+def test_invoice_page_rejects_a_corrupt_cursor(connection, agent):
+    with pytest.raises(invoice_service.InvalidCursor):
+        invoice_service.list_invoices(connection, agent, cursor="not-base64!!")
+
+
 def test_ledger_entries_balance():
     entries = capture_entries("inv_1", 5_000, payment_id="pay_1")
     entries += refund_entries("inv_1", 5_000, payment_id="ref_1")
