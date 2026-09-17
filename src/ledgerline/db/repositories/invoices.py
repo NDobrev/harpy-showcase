@@ -8,7 +8,7 @@ from ledgerline.db.models import InvoiceItemRow, InvoiceRow
 
 INSERT_INVOICE = """
 INSERT INTO invoices (
-    id, customer_email, region, status,
+    id, customer_id, region, status,
     subtotal_cents, discount_cents, tax_cents, total_cents, created_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
@@ -18,8 +18,19 @@ INSERT INTO invoice_items (invoice_id, description, quantity, unit_amount_cents)
 VALUES (?, ?, ?, ?)
 """
 
-SELECT_INVOICE = "SELECT * FROM invoices WHERE id = ?"
-SELECT_ALL_INVOICES = "SELECT * FROM invoices ORDER BY created_at DESC, id DESC"
+INVOICE_WITH_CUSTOMER = """
+SELECT invoices.*, customers.email AS customer_email
+FROM invoices
+LEFT JOIN customers ON customers.id = invoices.customer_id
+"""
+
+SELECT_INVOICE = f"{INVOICE_WITH_CUSTOMER} WHERE invoices.id = ?"
+SELECT_ALL_INVOICES = f"{INVOICE_WITH_CUSTOMER} ORDER BY invoices.created_at DESC, invoices.id DESC"
+SELECT_INVOICES_FOR_CUSTOMER = f"""
+{INVOICE_WITH_CUSTOMER}
+WHERE invoices.customer_id = ?
+ORDER BY invoices.created_at DESC, invoices.id DESC
+"""
 SELECT_ITEMS = "SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY id"
 UPDATE_STATUS = "UPDATE invoices SET status = ? WHERE id = ?"
 
@@ -29,7 +40,7 @@ def insert_invoice(connection: sqlite3.Connection, invoice: InvoiceRow) -> None:
         INSERT_INVOICE,
         (
             invoice.id,
-            invoice.customer_email,
+            invoice.customer_id,
             invoice.region,
             invoice.status,
             invoice.subtotal_cents,
@@ -59,6 +70,13 @@ def get_invoice(connection: sqlite3.Connection, invoice_id: str) -> InvoiceRow |
 
 def list_invoices(connection: sqlite3.Connection) -> list[InvoiceRow]:
     rows = connection.execute(SELECT_ALL_INVOICES).fetchall()
+    return [InvoiceRow.from_row(row) for row in rows]
+
+
+def list_invoices_for_customer(
+    connection: sqlite3.Connection, customer_id: str
+) -> list[InvoiceRow]:
+    rows = connection.execute(SELECT_INVOICES_FOR_CUSTOMER, (customer_id,)).fetchall()
     return [InvoiceRow.from_row(row) for row in rows]
 
 

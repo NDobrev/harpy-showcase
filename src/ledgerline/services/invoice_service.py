@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from ledgerline.auth.permissions import INVOICE_READ, INVOICE_WRITE, Principal, authorize
-from ledgerline.db.models import InvoiceItemRow, InvoiceRow
+from ledgerline.db.models import CustomerRow, InvoiceItemRow, InvoiceRow
+from ledgerline.db.repositories import customers as customer_repo
 from ledgerline.db.repositories import invoices as invoice_repo
 from ledgerline.domain.pricing import LineItem, price_invoice
 
@@ -33,6 +34,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def resolve_customer(connection: sqlite3.Connection, email: str) -> CustomerRow:
+    """Return the customer for `email`, creating the row on first invoice."""
+    existing = customer_repo.get_by_email(connection, email)
+    if existing is not None:
+        return existing
+    customer = CustomerRow(id=f"cus_{uuid.uuid4().hex[:12]}", email=email, created_at=_now())
+    customer_repo.insert_customer(connection, customer)
+    stored = customer_repo.get_by_email(connection, email)
+    return stored or customer
+
+
 def create_invoice(
     connection: sqlite3.Connection,
     principal: Principal,
@@ -44,9 +56,11 @@ def create_invoice(
         region=request.region,
         discount_percent=request.discount_percent,
     )
+    customer = resolve_customer(connection, request.customer_email)
     invoice = InvoiceRow(
         id=f"inv_{uuid.uuid4().hex[:12]}",
-        customer_email=request.customer_email,
+        customer_id=customer.id,
+        customer_email=customer.email,
         region=request.region,
         status=STATUS_OPEN,
         subtotal_cents=totals.subtotal_cents,
@@ -80,3 +94,13 @@ def get_invoice(
 def list_invoices(connection: sqlite3.Connection, principal: Principal) -> list[InvoiceRow]:
     authorize(principal, INVOICE_READ)
     return invoice_repo.list_invoices(connection)
+
+
+def list_customer_invoices(
+    connection: sqlite3.Connection,
+    principal: Principal,
+    customer_id: str,
+) -> list[InvoiceRow]:
+    """Every invoice for one customer — impossible before invoices had a customer_id."""
+    authorize(principal, INVOICE_READ)
+    return invoice_repo.list_invoices_for_customer(connection, customer_id)

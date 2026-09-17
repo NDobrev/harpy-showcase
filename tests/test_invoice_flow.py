@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from ledgerline.auth.permissions import PermissionDenied, Principal
+from ledgerline.db.repositories import customers as customer_repo
 from ledgerline.db.repositories import payments as payment_repo
 from ledgerline.domain.ledger import balance_cents, capture_entries, refund_entries
 from ledgerline.domain.pricing import LineItem
@@ -13,9 +14,12 @@ from ledgerline.services.invoice_service import NewInvoice
 ITEMS = [LineItem("Team seat", 2, 2_500)]
 
 
-def _new_invoice(discount_percent: float = 0.0) -> NewInvoice:
+def _new_invoice(
+    discount_percent: float = 0.0,
+    customer_email: str = "ops@acme.test",
+) -> NewInvoice:
     return NewInvoice(
-        customer_email="ops@acme.test",
+        customer_email=customer_email,
         region="XX",
         items=ITEMS,
         discount_percent=discount_percent,
@@ -74,6 +78,32 @@ def test_admin_refund_records_payment_and_status(connection, agent, admin):
     stored, _items = invoice_service.get_invoice(connection, agent, invoice.id)
     assert stored.status == invoice_service.STATUS_REFUNDED
     assert payment_repo.total_by_kind(connection, invoice.id, payment_service.KIND_REFUND) == 5_000
+
+
+def test_two_invoices_for_one_email_share_a_customer(connection, agent):
+    first = invoice_service.create_invoice(connection, agent, _new_invoice())
+    second = invoice_service.create_invoice(connection, agent, _new_invoice())
+
+    assert first.customer_id == second.customer_id
+    assert customer_repo.get_by_email(connection, "ops@acme.test") is not None
+
+
+def test_invoices_are_listed_per_customer(connection, agent):
+    mine = invoice_service.create_invoice(connection, agent, _new_invoice())
+    other = _new_invoice(customer_email="other@acme.test")
+    invoice_service.create_invoice(connection, agent, other)
+
+    rows = invoice_service.list_customer_invoices(connection, agent, mine.customer_id)
+
+    assert [row.id for row in rows] == [mine.id]
+
+
+def test_reads_still_expose_the_customer_email(connection, agent):
+    invoice = invoice_service.create_invoice(connection, agent, _new_invoice())
+
+    stored, _items = invoice_service.get_invoice(connection, agent, invoice.id)
+
+    assert stored.customer_email == "ops@acme.test"
 
 
 def test_ledger_entries_balance():
